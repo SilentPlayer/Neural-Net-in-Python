@@ -16,7 +16,7 @@ class NN:
     def sigmoid(self, z):
         return 1/(1+np.exp(-z))
     
-    def dSigmoid(self, z):
+    def d_sigmoid(self, z):
         return self.sigmoid(z) * (1 - self.sigmoid(z))
 
     def categorical_cross_entropy_error(self, y, y_hat):
@@ -44,7 +44,7 @@ class NN:
         db2 = (1/m) * np.sum(y_hat, axis=1, keepdims=True)
         
         dA1 = self.output_layer['Weight'].T @ y_hat
-        dZ1 = dA1 * self.dSigmoid(z[0])
+        dZ1 = dA1 * self.d_sigmoid(z[0])
         
         dW1 = (1/m) * (dZ1 @ a[0].T)
         db1 = (1/m) * np.sum(dZ1, axis=1, keepdims=True)
@@ -56,27 +56,26 @@ class NN:
         return grads, loss
     
     def train(self, x_train, y_train, x_test, y_test, epochs, batch_size, alpha=0.1):
+        print(f"initial accuracy: {self.calc_accuracy(x_train, y_train)}")
         batches = int(x_train.shape[0] // batch_size)
         for k in range(epochs):
             epoch_loss = 0
-            ## might implement drawing a random sample from the training set
-            x_train_shuffled = x_train
-            y_train_shuffled = y_train
+            ## randomize samples from training set
+            random_indices = np.random.permutation(x_train.shape[0])
             
             for j in range(batches):
                 start = j * batch_size
                 end = min(start+batch_size, x_train.shape[0]-1)
                 
-                x = x_train_shuffled[start:end, :]
-                y = y_train_shuffled[:, start:end]
+                x = x_train[random_indices[start:end], :]
+                y = y_train[:, random_indices[start:end]]
                 m_batch = end - start
 
                 epoch_loss += self.mini_batch(x, y, m_batch, alpha)
-
   
             print(f"loss after {k+1} epochs: {epoch_loss}")
-            print(f"training accuracy: {self.calcAccuracy(x_train_shuffled, y_train_shuffled)}")
-            print(f"test accuracy: {self.calcAccuracy(x_test, y_test)}")
+            print(f"training accuracy: {self.calc_accuracy(x_train, y_train)}")
+            print(f"test accuracy: {self.calc_accuracy(x_test, y_test)}")
 
     def mini_batch(self, x, y, m_batch, alpha):
         batch_loss = 0
@@ -94,7 +93,7 @@ class NN:
         self.hidden_layer['Weight'] -= alpha * grads['dW1']
         self.hidden_layer['bias'] -= alpha * grads['db1']
 
-    def calcAccuracy(self, x_train, y_train):
+    def calc_accuracy(self, x_train, y_train):
         acc = 0
         for i in range(x_train.shape[0]):
             predict, _ = self.forward_prop(x_train[i, :].reshape([x_train.shape[1],1]), y_train[:, i].reshape([y_train.shape[0],1]))
@@ -119,7 +118,7 @@ x_train = x_train.reshape([x_train.shape[0], x_train.shape[1] * x_train.shape[2]
 x_test = x_test.reshape([x_test.shape[0], x_test.shape[1] * x_test.shape[2]])
 
 #only train on n samples
-n=5000
+n=10000
 rand_indices = np.random.choice(x_train.shape[0], n, replace=True)[:n]
 
 x_train = x_train[rand_indices, :]
@@ -134,4 +133,4 @@ y_train = split_y(y_train)
 y_test = split_y(y_test)
 
 Net = NN(784, 300, 10)
-Net.train(x_train, y_train, x_test, y_test, 10, 100, 0.1)
+Net.train(x_train, y_train, x_test, y_test, 10, 100, 0.05)
