@@ -40,7 +40,7 @@ class NN:
     def backward_prop(self, a, z, y, m):
         y_hat = a[-1] - y
     
-        dW2 = (1/self.output_size) * (y_hat @ a[1].T)
+        dW2 = (1/m) * (y_hat @ a[1].T)
         db2 = (1/m) * np.sum(y_hat, axis=1, keepdims=True)
         
         dA1 = self.output_layer['Weight'].T @ y_hat
