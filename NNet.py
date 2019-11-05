@@ -2,22 +2,30 @@ import numpy as np
 from keras.datasets import mnist
 
 class NN:
+    weights = []
+    bias = []
     hidden_layer={}
     output_layer={}
-    def __init__(self, input_size, hidden_size, output_size):
-        self.hidden_layer['bias'] = np.random.randn(hidden_size, 1) / np.sqrt(hidden_size)
-        self.hidden_layer['Weight'] = np.random.randn(hidden_size, input_size) / np.sqrt(input_size)
-        self.output_layer['bias'] = np.random.randn(output_size, 1) / np.sqrt(hidden_size)
-        self.output_layer['Weight'] = np.random.randn(output_size, hidden_size) / np.sqrt(hidden_size)
+    def __init__(self, input_size):
         self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = output_size
+
+    def add_layer(self, layer_size):
+        if not bool(self.weights):
+            self.weights.append(np.random.randn(layer_size, self.input_size) / np.sqrt(self.input_size))
+            self.bias.append(np.random.randn(layer_size, 1) / np.sqrt(layer_size))
+        else:
+            self.weights.append(np.random.randn(layer_size, self.bias[-1].shape[0]) / np.sqrt(self.bias[-1].shape[0]))
+            self.bias.append(np.random.randn(layer_size, 1) / np.sqrt(layer_size))
 
     def sigmoid(self, z):
         return 1/(1+np.exp(-z))
     
     def d_sigmoid(self, z):
         return self.sigmoid(z) * (1 - self.sigmoid(z))
+
+    def softmax(self, z):
+        z_u = np.exp(z)
+        return z_u / np.sum(z_u)
 
     def categorical_cross_entropy_error(self, y, y_hat):
         dec = -y_hat[self.decode_y(y)][0]
@@ -29,31 +37,36 @@ class NN:
 
         a.append(x)
 
-        z.append((self.hidden_layer['Weight'] @ a[-1]) + self.hidden_layer['bias'])
-        a.append(self.sigmoid(z[-1]))
-
-        z.append((self.output_layer['Weight'] @ a[-1]) + self.output_layer['bias'])
-        a.append(self.sigmoid(z[-1]))
+        for k in range(len(self.bias)):
+            z.append((self.weights[k] @ a[-1]) + self.bias[k])
+            a.append(self.sigmoid(z[-1]))
         
         return a, z
 
     def backward_prop(self, a, z, y, m):
-        y_hat = a[-1] - y
+        d_weights = []
+        d_bias = []
+
+        y_hat = a[-1] - y  #d_z
+        d_z = y_hat
     
-        dW2 = (1/m) * (y_hat @ a[1].T)
-        db2 = (1/m) * np.sum(y_hat, axis=1, keepdims=True)
-        
-        dA1 = self.output_layer['Weight'].T @ y_hat
-        dZ1 = dA1 * self.d_sigmoid(z[0])
-        
-        dW1 = (1/m) * (dZ1 @ a[0].T)
-        db1 = (1/m) * np.sum(dZ1, axis=1, keepdims=True)
+        d_w = (1/m) * (y_hat @ a[-2].T)
+        d_weights.append(d_w)
+        d_b = (1/m) * np.sum(y_hat, axis=1, keepdims=True)
+        d_bias.append(d_b)
+
+        for k in range(len(self.weights)-1, 0, -1):
+            d_a = self.weights[k].T @ d_z
+            d_z = d_a * self.d_sigmoid(z[k-1])
+            
+            d_w = (1/m) * (d_z @ a[k-1].T)
+            d_weights.append(d_w)
+            d_b = (1/m) * np.sum(d_z, axis=1, keepdims=True)
+            d_bias.append(d_b)
 
         loss = self.categorical_cross_entropy_error(y, y_hat)
-        
-        grads = {"dW1": dW1, "db1": db1, "dW2": dW2, "db2": db2}
 
-        return grads, loss
+        return d_weights, d_bias, loss
     
     def train(self, x_train, y_train, x_test, y_test, epochs, batch_size, alpha=0.1):
         print(f"initial accuracy: {self.calc_accuracy(x_train, y_train)}")
@@ -81,17 +94,17 @@ class NN:
         batch_loss = 0
         for i in range(m_batch):
             a, z = self.forward_prop(x[i, :].reshape([x.shape[1],1]), y[:, i].reshape([y.shape[0],1]))
-            grads, loss = self.backward_prop(a, z, y[:, i].reshape([y.shape[0],1]), 1)
+            d_weights, d_bias, loss = self.backward_prop(a, z, y[:, i].reshape([y.shape[0],1]), 1)
             batch_loss += loss
-            self.update_params(grads, alpha)
+            self.update_params(d_weights, d_bias, alpha)
         return batch_loss
 
-    def update_params(self, grads, alpha):
-        self.output_layer['Weight'] -= alpha * grads['dW2']
-        self.output_layer['bias'] -= alpha * grads['db2']
-        
-        self.hidden_layer['Weight'] -= alpha * grads['dW1']
-        self.hidden_layer['bias'] -= alpha * grads['db1']
+    def update_params(self, d_weights, d_bias, alpha):
+        d_weights = np.flip(d_weights)
+        d_bias = np.flip(d_bias)
+        for k in range(len(d_weights)):
+            self.weights[k] -= alpha * d_weights[k]
+            self.bias[k] -= alpha * d_bias[k]
 
     def calc_accuracy(self, x_train, y_train):
         acc = 0
@@ -132,5 +145,9 @@ x_test = x_test.astype('float32') / 255
 y_train = split_y(y_train)
 y_test = split_y(y_test)
 
-Net = NN(784, 300, 10)
+# classify input size
+Net = NN(784)
+Net.add_layer(300)
+Net.add_layer(100)
+Net.add_layer(10)
 Net.train(x_train, y_train, x_test, y_test, 10, 100, 0.05)
