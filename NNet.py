@@ -4,18 +4,35 @@ from keras.datasets import mnist
 class NN:
     weights = []
     bias = []
+    activation_functions = []
     hidden_layer={}
     output_layer={}
     def __init__(self, input_size):
         self.input_size = input_size
 
-    def add_layer(self, layer_size):
+    def add_layer(self, layer_size, activation_function):
         if not bool(self.weights):
             self.weights.append(np.random.randn(layer_size, self.input_size) / np.sqrt(self.input_size))
             self.bias.append(np.random.randn(layer_size, 1) / np.sqrt(layer_size))
         else:
             self.weights.append(np.random.randn(layer_size, self.bias[-1].shape[0]) / np.sqrt(self.bias[-1].shape[0]))
             self.bias.append(np.random.randn(layer_size, 1) / np.sqrt(layer_size))
+        self.activation_functions.append(activation_function)
+
+    def get_activation_function(self, z, activation, derivative):
+        if activation.upper() == 'SIGMOID':
+            if derivative == False:
+                return self.sigmoid(z)
+            else:
+                return self.d_sigmoid(z)
+        elif activation.upper() == 'SOFTMAX':
+            return self.softmax(z)
+
+        '''elif activation.upper() == 'RELU'
+            if derivative == False:
+                return self.softmax(z)
+            else:
+                return self.d_softmax(z)'''
 
     def sigmoid(self, z):
         return 1/(1+np.exp(-z))
@@ -39,7 +56,7 @@ class NN:
 
         for k in range(len(self.bias)):
             z.append((self.weights[k] @ a[-1]) + self.bias[k])
-            a.append(self.sigmoid(z[-1]))
+            a.append(self.get_activation_function(z[-1], self.activation_functions[k], False))
         
         return a, z
 
@@ -57,7 +74,7 @@ class NN:
 
         for k in range(len(self.weights)-1, 0, -1):
             d_a = self.weights[k].T @ d_z
-            d_z = d_a * self.d_sigmoid(z[k-1])
+            d_z = d_a * self.get_activation_function(z[k-1], self.activation_functions[k-1], True)
             
             d_w = (1/m) * (d_z @ a[k-1].T)
             d_weights.append(d_w)
@@ -68,7 +85,8 @@ class NN:
 
         return d_weights, d_bias, loss
     
-    def train(self, x_train, y_train, x_test, y_test, epochs, batch_size, alpha=0.1):
+    def train(self, x_train, y_train, x_test, y_test, epochs, batch_size, lambda_=0.01, alpha=0.1):
+        self.lambda_ = lambda_
         print(f"initial accuracy: {self.calc_accuracy(x_train, y_train)}")
         batches = int(x_train.shape[0] // batch_size)
         for k in range(epochs):
@@ -85,7 +103,9 @@ class NN:
                 m_batch = end - start
 
                 epoch_loss += self.mini_batch(x, y, m_batch, alpha)
-  
+
+            # regularize loss
+            #epoch_loss += 
             print(f"loss after {k+1} epochs: {epoch_loss}")
             print(f"training accuracy: {self.calc_accuracy(x_train, y_train)}")
             print(f"test accuracy: {self.calc_accuracy(x_test, y_test)}")
@@ -96,14 +116,14 @@ class NN:
             a, z = self.forward_prop(x[i, :].reshape([x.shape[1],1]), y[:, i].reshape([y.shape[0],1]))
             d_weights, d_bias, loss = self.backward_prop(a, z, y[:, i].reshape([y.shape[0],1]), 1)
             batch_loss += loss
-            self.update_params(d_weights, d_bias, alpha)
-        return batch_loss
+            self.update_params(d_weights, d_bias, alpha, m_batch)
+        return batch_loss.copy()
 
-    def update_params(self, d_weights, d_bias, alpha):
+    def update_params(self, d_weights, d_bias, alpha, m_batch):
         d_weights = np.flip(d_weights)
         d_bias = np.flip(d_bias)
         for k in range(len(d_weights)):
-            self.weights[k] -= alpha * d_weights[k]
+            self.weights[k] -= alpha * (d_weights[k] + (self.lambda_/m_batch) * self.weights[k])
             self.bias[k] -= alpha * d_bias[k]
 
     def calc_accuracy(self, x_train, y_train):
@@ -147,7 +167,7 @@ y_test = split_y(y_test)
 
 # classify input size
 Net = NN(784)
-Net.add_layer(300)
-Net.add_layer(100)
-Net.add_layer(10)
-Net.train(x_train, y_train, x_test, y_test, 10, 100, 0.05)
+Net.add_layer(500, 'sigmoid')
+Net.add_layer(200, 'sigmoid')
+Net.add_layer(10, 'softmax')
+Net.train(x_train, y_train, x_test, y_test, 10, 100, 0.01, 0.03)
